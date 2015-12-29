@@ -12,10 +12,7 @@ use Data::Dumper;
 my @events=(
     { name=>'foo', weight=>1, log=>[] },
     { name=>'bar', weight=>3, log=>[] },
-    { name=>'baz', weight=>13, log=>[] },
-    { name=>'fizz', weight=>11, log=>[] },
-    { name=>'buzz', weight=>6, log=>[] },
-    { name=>'booze', weight=>15, log=>[] }
+    { name=>'baz', weight=>13, log=>[] }
 );
 
 
@@ -24,11 +21,13 @@ my @timeIntervals=(
     3,   # last 3 seconds
     5,   # last 5 seconds
     10,  # last 10 seconds
-    30,  # last 30 seconds
-    60,  # last minute
-    300, # last 5 mins
-    900  # last 15 mins
+    30   # last 30 seconds
 );
+
+
+# Printing wastes a lot of time so maybe just print
+# every so many events
+my $printEvery=10000;
 
 
 # Convert weights into partitions to make choosing a random
@@ -44,6 +43,7 @@ foreach (@events){
 # t denotes the number of seconds elapsed after t0
 my $t0=[gettimeofday];
 my $t=0.000;
+my $iter=-1;
 
 while (1){
 
@@ -67,47 +67,57 @@ while (1){
     };
 
     my $countSinceTimeX=sub{
-        my ($x,@log)=@_;
-
-        # nothing in the log implies a count of 0
-        return 0 if $#log<0;
+        my ($x,$log)=@_;
         
-        my ($first,$last)=(0,$#log);
+        # nothing in the log implies a count of 0
+        return 0 if $#$log<0;
+        
+        my ($first,$last)=(0,$#$log);
 
         while ($first<=$last){
             my $mid=int(($first+$last)/2);
 
-            if ($x<$log[$mid]->{time}){
+            if ($x<@{$log}[$mid]->{time}){
                 $last=$mid-1;
             }else{
                 $first=$mid+1;
             }
         }
 
-        return 0 if $first>$#log;
-        (scalar @log)-($log[$first]->{count});
+        return 0 if $first>$#$log;
+        
+        @$log-@{$log}[$first]->{count};
     };
 
     my $i=$chooseWeightedIndex->();
+
+    # At this point the event has "happened"
     $t=tv_interval $t0;
 
-    system("clear");
-    print "t=$t .. $events[$i]->{name}\n";
+
 
     push @{$events[$i]->{log}},{
         count=> scalar @{$events[$i]->{log}},
         time=> $t
     };
 
+
+
+    #usleep (rand(1000));
+
+    next if (++$iter)%$printEvery;
+
+    system("clear");
+    print "iter=$iter time=$t - most recent event is a $events[$i]->{name}\n";
+    print "\n";
+    print "Realtime Counters\n";
+
     foreach my $event (@events){
         print "$event->{name} [".(scalar @{$event->{log}})." instances] ";
 
         foreach my $timeInterval (@timeIntervals){
-            print "(Last $timeInterval seconds: ".($countSinceTimeX->($t-$timeInterval, @{$event->{log}})).") ";
+            print "(Last $timeInterval seconds: ".($countSinceTimeX->($t-$timeInterval,$event->{log})).") ";
         }
         print "\n";
-
     }
-
-    usleep (rand(1000000));
 }
